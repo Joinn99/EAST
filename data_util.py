@@ -5,6 +5,7 @@ see https://github.com/fchollet/keras/blob/master/keras/utils/data_utils.py
 import time
 import numpy as np
 import threading
+import os
 import multiprocessing
 try:
     import queue
@@ -31,10 +32,20 @@ class GeneratorEnqueuer():
                  random_seed=None):
         self.wait_time = wait_time
         self._generator = generator
-        self._use_multiprocessing = use_multiprocessing
+        if os.name is 'nt' and use_multiprocessing is True:
+            # On Windows, avoid **SYSTEMATIC** error in `multiprocessing`:
+            # `TypeError: can't pickle generator objects`
+            # => Suggest multithreading instead of multiprocessing on Windows
+            raise ValueError('Using a generator with `use_multiprocessing=True`'
+                             ' is not supported on Windows (no marshalling of'
+                             ' generators across process boundaries). Instead,'
+                             ' use single thread/process or multithreading.')
+        else:
+            self._use_multiprocessing = use_multiprocessing
         self._threads = []
         self._stop_event = None
         self.queue = None
+        self.genlock = threading.Lock()
         self.random_seed = random_seed
 
     def start(self, workers=1, max_queue_size=10):
@@ -48,15 +59,16 @@ class GeneratorEnqueuer():
 
         def data_generator_task():
             while not self._stop_event.is_set():
-                try:
-                    if self._use_multiprocessing or self.queue.qsize() < max_queue_size:
-                        generator_output = next(self._generator)
-                        self.queue.put(generator_output)
-                    else:
-                        time.sleep(self.wait_time)
-                except Exception:
-                    self._stop_event.set()
-                    raise
+                with self.genlock:
+                    try:
+                        if self._use_multiprocessing or self.queue.qsize() < max_queue_size:
+                            generator_output = next(self._generator)
+                            self.queue.put(generator_output)
+                        else:
+                            time.sleep(self.wait_time)
+                    except Exception:
+                        self._stop_event.set()
+                        raise
 
         try:
             if self._use_multiprocessing:

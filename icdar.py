@@ -35,7 +35,7 @@ FLAGS = tf.app.flags.FLAGS
 
 def get_images():
     files = []
-    for ext in ['jpg', 'png', 'jpeg', 'JPG']:
+    for ext in ['jpg', 'png', 'jpeg']:
         files.extend(glob.glob(
             os.path.join(FLAGS.training_data_path, '*.{}'.format(ext))))
     return files
@@ -51,7 +51,7 @@ def load_annoataion(p):
     text_tags = []
     if not os.path.exists(p):
         return np.array(text_polys, dtype=np.float32)
-    with open(p, 'r') as f:
+    with open(p, 'r',encoding = 'utf-8') as f:
         reader = csv.reader(f)
         for line in reader:
             label = line[-1]
@@ -721,7 +721,7 @@ def generator(input_size=512, batch_size=32,
 
 def get_batch(num_workers, **kwargs):
     try:
-        enqueuer = GeneratorEnqueuer(generator(**kwargs), use_multiprocessing=True)
+        enqueuer = GeneratorEnqueuer(generator(**kwargs), use_multiprocessing=False)
         print('Generator use 10 batches for buffering, this may take a while, you can tune this yourself.')
         enqueuer.start(max_queue_size=10, workers=num_workers)
         generator_output = None
